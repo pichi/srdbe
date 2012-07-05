@@ -1,6 +1,10 @@
 .eunit
 deps
+ebin
 priv
 *.o
 *.beam
 *.plt
+.*.sw?
+.sw?
+erl_crash.dump
