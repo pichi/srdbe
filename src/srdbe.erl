@@ -11,10 +11,12 @@
 
 -module(srdbe).
 
--export([test/0,
-         lift_ii/2,
-         lift_is/2,
-         sum_di/5]).
+-export([
+  test/0,
+  projection_ii/2,
+  lift_ii/2,
+  lift_is/2,
+  sum_di/5]).
 
 -compile(export_all).
 
@@ -34,6 +36,24 @@
 
 test() ->
   exit(nif_not_loaded).
+
+%% @doc Project Lu into Data stream
+%%
+%% The function makes projection index `Idx' which projects given data
+%% `Data' into look-up `Lu'. `Lu' have to contain unique values. This
+%% function project integer (i32) values into integer look-up and returns
+%% integer index.
+%%
+%% @end
+
+-spec projection_ii( Data, Lu ) -> Idx when
+  Data :: stream(),
+  Lu :: stream(),
+  Idx :: {'stream', {'integer', nullity()}, stream()}.
+
+projection_ii(Data, Lu) ->
+  LuKV = projection_make_lu(Lu),
+  projection_make_idx(LuKV, Data).
 
 %% @doc Lift Data using Index
 %%
@@ -142,4 +162,31 @@ has_null_i(_) ->
   exit(nif_not_loaded).
 
 has_null_d(_) ->
+  exit(nif_not_loaded).
+
+projection_make_lu(L) ->
+  projection_make_lu(create_trie_id(), L, 1).
+
+projection_make_lu(LuKV, [], _) -> LuKV;
+projection_make_lu(LuKV, [H|T], N) when is_binary(H) ->
+  projection_make_lu(LuKV, T, projection_make_lu_(LuKV, H, N)).
+
+create_trie_id() ->
+  exit(nif_not_loaded).
+
+projection_make_lu_(_, _, _) ->
+  exit(nif_not_loaded).
+
+projection_make_idx(LuKV, F) ->
+  projection_make_idx(LuKV, not_null, lists:reverse(F), []).
+
+projection_make_idx(_, Null, [], Acc) -> {stream, {integer, Null}, Acc};
+projection_make_idx(LuKV, not_null, [H | T], Acc) when is_binary(H) ->
+  {Null, NewH} = projection_make_idx_(LuKV, H),
+  projection_make_idx(LuKV, Null, T, [NewH | Acc]);
+projection_make_idx(LuKV, default_null, [H | T], Acc) when is_binary(H) ->
+  {_, NewH} = projection_make_idx_(LuKV, H),
+  projection_make_idx(LuKV, default_null, T, [NewH | Acc]).
+
+projection_make_idx_(_, _) ->
   exit(nif_not_loaded).
