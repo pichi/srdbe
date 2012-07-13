@@ -90,6 +90,23 @@ lift_ii(IDX, [D]) ->
 lift_is(IDX, [D]) ->
   [ lift1_is(I, D) || I<-IDX ].
 
+%%
+%% The function makes stream of all unique `Key' values which are in `Set'.
+%% `Key' values are integer (i32) and `Set' is bit-mask (boolean) of same
+%% size. Resulting aggregation `Elements' are alphabetically ordered unique
+%% values from `Key' where corresponding value in `Set' is true.
+%%
+%% @end
+
+-spec aggregation(Key, Set) -> Elements when
+  Key :: stream(),
+  Set :: stream(),
+  Elements :: {'stream', {'integer', 'not_null'}, stream()}.
+
+aggregation(D, S) ->
+  Aggr = scan(D, S),
+  {stream, {integer, not_null}, gather_i(Aggr, ?CHUNK_SIZE)}.
+
 %% @doc Sum data using index
 %%
 %% The function sums `Data' into stream indexed by `Idx' filtered by `Set'.
@@ -189,4 +206,18 @@ projection_make_idx(LuKV, default_null, [H | T], Acc) when is_binary(H) ->
   projection_make_idx(LuKV, default_null, T, [NewH | Acc]).
 
 projection_make_idx_(_, _) ->
+  exit(nif_not_loaded).
+
+scan(D, S) ->
+  scan(create_trie_id(), D, S).
+
+scan(Aggr, [], []) -> Aggr;
+scan(Aggr, [DH|DT], [SH|ST]) ->
+  scan_is(Aggr, DH, SH),
+  scan(Aggr, DT, ST).
+
+scan_is(_,_,_) ->
+  exit(nif_not_loaded).
+
+gather_i(_,_) ->
   exit(nif_not_loaded).

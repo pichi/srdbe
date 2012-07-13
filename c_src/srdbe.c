@@ -647,6 +647,109 @@ projection_make_idx(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
             enif_make_binary(env, &idx));
 }
 
+    static ERL_NIF_TERM
+scan_is(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    trie *t;
+    ErlNifBinary data, set;
+
+    if(!(
+                enif_get_resource(env, argv[0], srdbe_trie_id, (void **) &t) &&
+                enif_inspect_binary(env, argv[1], &data) &&
+                enif_inspect_binary(env, argv[2], &set) &&
+                (set.size*8 >= data.size/4)
+        ))
+        return enif_make_badarg(env);
+
+    {
+        int32_t *datadata = (int32_t *)data.data;
+        size_t i, datasize = data.size/sizeof(int32_t);
+        char *setdata = (char *)set.data;
+        intptr_t *val;
+        for(i=0; i<datasize; i++)
+            if(setdata[i>>3] & ((1<<7) >> (i & 7)))
+            {
+                val = (intptr_t *)add(t, SWAP32(datadata[i]));
+                *val = 1;
+            };
+    }
+
+    return srdbe_atoms.ok;
+}
+
+typedef struct {
+    ErlNifEnv *env;
+    ERL_NIF_TERM list;
+    ErlNifBinary chunk;
+    size_t i;
+    int chunk_size;
+} gather_state;
+
+static void
+gather_i_fun(
+        trie_node *node,
+        int key,
+        void *state)
+{
+    if(node) {
+        gather_state *s=(gather_state *)state;
+        ((int32_t *)(s->chunk.data))[s->i++] = SWAP32(key);
+        if(s->i >= s->chunk_size)
+        {
+            if(((s->i)*sizeof(int32_t)) != s->chunk.size)
+                enif_realloc_binary(&(s->chunk), (s->i)*sizeof(int32_t));
+            s->list = enif_make_list_cell(s->env,
+                    enif_make_binary(s->env, &(s->chunk)),
+                    s->list);
+            enif_alloc_binary(64, &(s->chunk));
+            s->i = 0;
+        }
+        else if(((s->i)*sizeof(int32_t)) >= s->chunk.size)
+        {
+            enif_realloc_binary(&(s->chunk), (s->chunk.size)*2);
+        }
+    };
+    return;
+}
+
+    static ERL_NIF_TERM
+gather_i(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    trie *t;
+    gather_state state;
+    ERL_NIF_TERM result;
+
+    if(!(
+                enif_get_resource(env, argv[0], srdbe_trie_id, (void **) &t) &&
+                enif_get_int(env, argv[1], &(state.chunk_size)) &&
+                enif_alloc_binary(64, &(state.chunk))
+        ))
+        return enif_make_badarg(env);
+
+    state.env = env;
+    state.list = enif_make_list(env, 0);
+    state.i = 0;
+
+    foreach(t, gather_i_fun, &state);
+
+    if(state.i)
+    {
+        enif_realloc_binary(&(state.chunk), (state.i)*sizeof(int32_t));
+        state.list = enif_make_list_cell(env,
+                    enif_make_binary(env, &(state.chunk)),
+                    state.list);
+    }
+    else
+    {
+        enif_release_binary(&(state.chunk));
+    }
+
+    if(!enif_make_reverse_list(env, state.list, &result))
+        return enif_make_badarg(env);
+
+    return result;
+}
+
 static ErlNifFunc nif_funcs[] =
 {
     {"test", 0, test},
@@ -661,6 +764,8 @@ static ErlNifFunc nif_funcs[] =
     {"create_trie_id", 0, create_trie_id},
     {"projection_make_lu_", 3, projection_make_lu},
     {"projection_make_idx_", 2, projection_make_idx},
+    {"scan_is", 3, scan_is},
+    {"gather_i", 2, gather_i},
 };
 
 ERL_NIF_INIT(srdbe, nif_funcs, load, NULL, upgrade, unload)
