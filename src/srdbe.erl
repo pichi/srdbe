@@ -90,6 +90,24 @@ lift_ii(IDX, [D]) ->
 lift_is(IDX, [D]) ->
   [ lift1_is(I, D) || I<-IDX ].
 
+%% @doc Make element filter
+%%
+%% Function makes new bit-mask (boolean) `Set' which is set true in same
+%% place where value in `Data' exists in `Filter'. Values in `Data' and
+%% `Filter' are integer (i32).
+%%
+%% @end
+
+-spec element_filter_ii(Data, Filter) -> Set when
+  Data :: stream(),
+  Filter :: stream(),
+  Set :: {'stream', {'set', 'not_null'}, stream()}.
+
+element_filter_ii(A, S) ->
+  LuKV = projection_make_lu(S),
+  {stream, {set, not_null}, element_filter(LuKV, A)}.
+
+%% @doc Create aggregation elements set
 %%
 %% The function makes stream of all unique `Key' values which are in `Set'.
 %% `Key' values are integer (i32) and `Set' is bit-mask (boolean) of same
@@ -220,4 +238,11 @@ scan_is(_,_,_) ->
   exit(nif_not_loaded).
 
 gather_i(_,_) ->
+  exit(nif_not_loaded).
+
+element_filter(_, []) -> [];
+element_filter(LuKV, [H|T]) ->
+  [element_filter_(LuKV, H) | element_filter(LuKV, T)].
+
+element_filter_(_,_) ->
   exit(nif_not_loaded).

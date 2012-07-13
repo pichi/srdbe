@@ -750,6 +750,33 @@ gather_i(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
     return result;
 }
 
+    static ERL_NIF_TERM
+element_filter(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    trie *t;
+    ErlNifBinary data, set;
+
+    if(!(
+                enif_get_resource(env, argv[0], srdbe_trie_id, (void **) &t) &&
+                enif_inspect_binary(env, argv[1], &data) &&
+                enif_alloc_binary((data.size+31) / 32, &set)
+        ))
+        return enif_make_badarg(env);
+
+    memset(set.data, 0, set.size);
+
+    {
+        int32_t *datadata = (int32_t *)data.data;
+        size_t i, datasize = data.size/sizeof(int32_t);
+        char *setdata = (char *)set.data;
+        for(i=0; i<datasize; i++)
+            if(lookup(t, SWAP32(datadata[i])))
+                setdata[i>>3] |= (1 << 7) >> (i & 7);
+    }
+
+    return enif_make_binary(env, &set);
+}
+
 static ErlNifFunc nif_funcs[] =
 {
     {"test", 0, test},
@@ -766,6 +793,7 @@ static ErlNifFunc nif_funcs[] =
     {"projection_make_idx_", 2, projection_make_idx},
     {"scan_is", 3, scan_is},
     {"gather_i", 2, gather_i},
+    {"element_filter_", 2, element_filter},
 };
 
 ERL_NIF_INIT(srdbe, nif_funcs, load, NULL, upgrade, unload)
